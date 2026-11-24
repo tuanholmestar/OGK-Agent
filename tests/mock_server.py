@@ -1,5 +1,5 @@
 
-
+import time
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -40,7 +40,8 @@ class MockOllamaHandler(BaseHTTPRequestHandler):
 
         try:
             request_data = json.loads(body.decode("utf-8"))
-
+            if request_data.get("model") == "mock-slow-response":
+                time.sleep(3)
             print("\n[Mock Server] Received request:")
             print(json.dumps(request_data, indent=4, ensure_ascii=False))
 
