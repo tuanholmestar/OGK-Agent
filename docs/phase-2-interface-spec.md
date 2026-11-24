@@ -1,7 +1,7 @@
-# OGK-Agent – Phase 2: LLM Client & Infrastructure
-## Interface Specification v1.2 – Draft for Final Approval
+﻿# OGK-Agent – Phase 2: LLM Client & Infrastructure
+## Interface Specification v1.2 – Frozen / Approved
 
-**Trạng thái:** Draft for Final Approval  
+**Trạng thái:** Frozen / Approved  
 **Phiên bản:** 1.2  
 **Architecture:** v1.0  
 **Ngôn ngữ:** C++23  
@@ -1093,6 +1093,7 @@ Có thể điều chỉnh cách chia file khi triển khai nếu không thay đ�
 
 ---
 
-**End of Interface Specification v1.2 – Draft for Final Approval**
+**End of Interface Specification v1.2 – Frozen / Approved**
 
-This document is not frozen until the user gives final approval. Implementation must begin only after final approval.
+This specification is frozen and approved. Changes require explicit approval.
+
