@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <ogk/llm/llm_client.hpp>
@@ -20,15 +21,28 @@ struct OllamaClientConfig {
 class OllamaClient : public LLMClient {
 public:
     explicit OllamaClient(const OllamaClientConfig& config)
-        : config_(config) {
+        : config_(config)
+    {
         if (config_.model.empty()) {
-            throw InvalidRequestError("Ollama model must not be empty");
+            throw InvalidRequestError(
+                "Ollama model must not be empty"
+            );
         }
+
+        if (config_.base_url.empty() ||
+            (config_.base_url.rfind("http://", 0) != 0 &&
+             config_.base_url.rfind("https://", 0) != 0)) {
+            throw InvalidRequestError(
+                "Ollama base_url must use HTTP or HTTPS"
+            );
+        }
+
         if (config_.connect_timeout_seconds <= 0) {
             throw InvalidRequestError(
                 "Ollama connect_timeout_seconds must be greater than zero"
             );
         }
+
         if (config_.request_timeout_seconds <= 0) {
             throw InvalidRequestError(
                 "Ollama request_timeout_seconds must be greater than zero"

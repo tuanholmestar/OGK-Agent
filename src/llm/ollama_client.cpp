@@ -88,10 +88,13 @@ const char* role_to_string(MessageRole role)
     switch (role) {
     case MessageRole::System:
         return "system";
+
     case MessageRole::User:
         return "user";
+
     case MessageRole::Assistant:
         return "assistant";
+
     case MessageRole::Tool:
         return "tool";
     }
@@ -102,6 +105,7 @@ const char* role_to_string(MessageRole role)
 json serialize_message(const Message& message)
 {
     json result;
+
     result["role"] = role_to_string(message.role);
 
     std::string content;
@@ -223,12 +227,15 @@ MessageRole role_from_string(const std::string& role)
     if (role == "system") {
         return MessageRole::System;
     }
+
     if (role == "user") {
         return MessageRole::User;
     }
+
     if (role == "assistant") {
         return MessageRole::Assistant;
     }
+
     if (role == "tool") {
         return MessageRole::Tool;
     }
@@ -241,6 +248,7 @@ ChatResponse parse_response(const json& body)
     if (!body.is_object() ||
         !body.contains("message") ||
         !body["message"].is_object()) {
+
         throw ResponseParseError(
             "Ollama response does not contain a valid message"
         );
@@ -250,6 +258,7 @@ ChatResponse parse_response(const json& body)
 
     if (!message_json.contains("role") ||
         !message_json["role"].is_string()) {
+
         throw ResponseParseError("Missing or invalid message role");
     }
 
@@ -282,6 +291,7 @@ ChatResponse parse_response(const json& body)
         for (const auto& call : message_json["tool_calls"]) {
             if (!call.contains("function") ||
                 !call["function"].is_object()) {
+
                 throw ResponseParseError("Invalid tool call");
             }
 
@@ -289,14 +299,17 @@ ChatResponse parse_response(const json& body)
 
             if (!function.contains("name") ||
                 !function["name"].is_string()) {
+
                 throw ResponseParseError("Missing tool call name");
             }
+
             if (!function.contains("arguments") ||
                 !function["arguments"].is_object()) {
+
                 throw ResponseParseError(
                     "Missing or invalid tool call arguments"
                 );
-}
+            }
 
             message.tool_calls.push_back({
                 std::nullopt,
@@ -314,6 +327,7 @@ ChatResponse parse_response(const json& body)
 
     if (body.contains("done_reason") &&
         body["done_reason"].is_string()) {
+
         response.finish_reason =
             body["done_reason"].get<std::string>();
     }
@@ -325,12 +339,14 @@ ChatResponse parse_response(const json& body)
 
         if (body.contains("prompt_eval_count") &&
             body["prompt_eval_count"].is_number_integer()) {
+
             usage.input_tokens =
                 body["prompt_eval_count"].get<int>();
         }
 
         if (body.contains("eval_count") &&
             body["eval_count"].is_number_integer()) {
+
             usage.output_tokens =
                 body["eval_count"].get<int>();
         }
@@ -360,6 +376,7 @@ ChatResponse OllamaClient::chat(const ChatRequest& request)
     }
 
     const std::string url = make_url(config_.base_url);
+
     const std::string request_body =
         serialize_request(request, config_).dump();
 
@@ -374,64 +391,90 @@ ChatResponse OllamaClient::chat(const ChatRequest& request)
         throw ConnectionError("Failed to create HTTP headers");
     }
 
-    curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
+    // Hàm kiểm tra kết quả thiết lập CURL option.
+    auto set_option = [&](CURLoption option, auto value, const char* name) {
+        const CURLcode code = curl_easy_setopt(
+            curl.get(),
+            option,
+            value
+        );
 
-    curl_easy_setopt(curl.get(), CURLOPT_POST, 1L);
-    curl_easy_setopt(
-        curl.get(),
+        if (code != CURLE_OK) {
+            throw LLMError(
+                std::string("Failed to set ") + name + ": " +
+                curl_easy_strerror(code)
+            );
+        }
+    };
+
+    set_option(CURLOPT_URL, url.c_str(), "CURLOPT_URL");
+
+    set_option(
+        CURLOPT_HTTPHEADER,
+        headers.get(),
+        "CURLOPT_HTTPHEADER"
+    );
+
+    set_option(CURLOPT_POST, 1L, "CURLOPT_POST");
+
+    set_option(
         CURLOPT_POSTFIELDS,
-        request_body.c_str()
+        request_body.c_str(),
+        "CURLOPT_POSTFIELDS"
     );
-    curl_easy_setopt(
-        curl.get(),
+
+    set_option(
         CURLOPT_POSTFIELDSIZE_LARGE,
-        static_cast<curl_off_t>(request_body.size())
+        static_cast<curl_off_t>(request_body.size()),
+        "CURLOPT_POSTFIELDSIZE_LARGE"
     );
 
-    curl_easy_setopt(
-        curl.get(),
+    set_option(
         CURLOPT_CONNECTTIMEOUT,
-        static_cast<long>(config_.connect_timeout_seconds)
+        static_cast<long>(config_.connect_timeout_seconds),
+        "CURLOPT_CONNECTTIMEOUT"
     );
 
-    curl_easy_setopt(
-        curl.get(),
+    set_option(
         CURLOPT_TIMEOUT,
-        static_cast<long>(config_.request_timeout_seconds)
+        static_cast<long>(config_.request_timeout_seconds),
+        "CURLOPT_TIMEOUT"
     );
 
-    curl_easy_setopt(
-        curl.get(),
+    set_option(CURLOPT_NOSIGNAL, 1L, "CURLOPT_NOSIGNAL");
+
+    set_option(
         CURLOPT_WRITEFUNCTION,
-        write_callback
-    );
-    curl_easy_setopt(
-        curl.get(),
-        CURLOPT_WRITEDATA,
-        &response_body
+        write_callback,
+        "CURLOPT_WRITEFUNCTION"
     );
 
-    curl_easy_setopt(
-        curl.get(),
+    set_option(
+        CURLOPT_WRITEDATA,
+        &response_body,
+        "CURLOPT_WRITEDATA"
+    );
+
+    set_option(
         CURLOPT_ERRORBUFFER,
-        error_buffer
+        error_buffer,
+        "CURLOPT_ERRORBUFFER"
     );
 
     const CURLcode result = curl_easy_perform(curl.get());
 
-        if (result != CURLE_OK) {
+    if (result != CURLE_OK) {
         const std::string error_message =
             error_buffer[0] != '\0'
                 ? error_buffer
                 : curl_easy_strerror(result);
 
-        // Lỗi ghi response body
+        // Lỗi ghi response body.
         if (result == CURLE_WRITE_ERROR) {
             throw LLMError("Failed to write Ollama response body");
         }
 
-        // Lỗi timeout
+        // Lỗi timeout.
         if (result == CURLE_OPERATION_TIMEDOUT) {
             double connect_time = 0.0;
 
@@ -449,13 +492,14 @@ ChatResponse OllamaClient::chat(const ChatRequest& request)
             throw TimeoutError(kind, error_message);
         }
 
-        // Lỗi kết nối
+        // Lỗi kết nối.
         if (result == CURLE_COULDNT_CONNECT ||
             result == CURLE_COULDNT_RESOLVE_HOST ||
             result == CURLE_COULDNT_RESOLVE_PROXY ||
             result == CURLE_RECV_ERROR ||
             result == CURLE_SEND_ERROR ||
             result == CURLE_GOT_NOTHING) {
+
             throw ConnectionError(error_message);
         }
 
@@ -469,6 +513,7 @@ ChatResponse OllamaClient::chat(const ChatRequest& request)
         CURLINFO_RESPONSE_CODE,
         &status_code
     );
+
     if (status_code < 200 || status_code >= 300) {
         throw ApiError(
             static_cast<int>(status_code),
@@ -479,6 +524,7 @@ ChatResponse OllamaClient::chat(const ChatRequest& request)
 
     try {
         const json body = json::parse(response_body);
+
         return parse_response(body);
     }
     catch (const nlohmann::json::exception& error) {
