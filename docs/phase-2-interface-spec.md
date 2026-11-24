@@ -1,4 +1,4 @@
-﻿# OGK-Agent – Phase 2: LLM Client & Infrastructure
+# OGK-Agent – Phase 2: LLM Client & Infrastructure
 ## Interface Specification v1.2 – Frozen / Approved
 
 **Trạng thái:** Frozen / Approved  
