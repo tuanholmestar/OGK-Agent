@@ -1,16 +1,17 @@
 
 #include <ogk/llm/llm_errors.hpp>
+#include <ogk/llm/ollama_client.hpp>
 
 #include <functional>
 #include <iostream>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 using namespace ogk::llm;
 using namespace std;
 
-// Kiểm tra một điều kiện
+
+// Kiểm tra một điều kiện.
 void check(bool condition, const string& message)
 {
     if (!condition)
@@ -19,7 +20,29 @@ void check(bool condition, const string& message)
     }
 }
 
-// Chạy từng test và ghi nhận kết quả
+
+// Kiểm tra một đoạn code có ném InvalidRequestError hay không.
+void check_invalid_config(
+    const function<void()>& action,
+    const string& message
+)
+{
+    bool caught = false;
+
+    try
+    {
+        action();
+    }
+    catch (const InvalidRequestError&)
+    {
+        caught = true;
+    }
+
+    check(caught, message);
+}
+
+
+// Chạy từng test và ghi nhận kết quả.
 void run_test(
     const string& name,
     const function<void()>& test,
@@ -41,12 +64,13 @@ void run_test(
     }
 }
 
+
 int main()
 {
     int passed = 0;
     int failed = 0;
 
-    // Test 1: LLMError
+    // Test 1: LLMError.
     run_test("LLMError message", []()
     {
         LLMError error("Test error");
@@ -57,7 +81,8 @@ int main()
         );
     }, passed, failed);
 
-    // Test 2: TimeoutError - Connect
+
+    // Test 2: TimeoutError - Connect.
     run_test("TimeoutError Connect", []()
     {
         TimeoutError error(
@@ -76,7 +101,8 @@ int main()
         );
     }, passed, failed);
 
-    // Test 3: TimeoutError - Request
+
+    // Test 3: TimeoutError - Request.
     run_test("TimeoutError Request", []()
     {
         TimeoutError error(
@@ -90,7 +116,8 @@ int main()
         );
     }, passed, failed);
 
-    // Test 4: ApiError basic
+
+    // Test 4: ApiError basic.
     run_test("ApiError basic", []()
     {
         ApiError error(
@@ -115,7 +142,8 @@ int main()
         );
     }, passed, failed);
 
-    // Test 5: ApiError body exactly 4096 bytes
+
+    // Test 5: ApiError body exactly 4096 bytes.
     run_test("ApiError body exactly 4096 bytes", []()
     {
         const string body(4096, 'A');
@@ -133,7 +161,8 @@ int main()
         );
     }, passed, failed);
 
-    // Test 6: ApiError body exceeds 4096 bytes
+
+    // Test 6: ApiError body exceeds 4096 bytes.
     run_test("ApiError body exceeds 4096 bytes", []()
     {
         const string body(5000, 'A');
@@ -158,7 +187,8 @@ int main()
         );
     }, passed, failed);
 
-    // Test 7: ConnectionError
+
+    // Test 7: ConnectionError.
     run_test("ConnectionError", []()
     {
         ConnectionError error("Connection failed");
@@ -169,7 +199,8 @@ int main()
         );
     }, passed, failed);
 
-    // Test 8: ResponseParseError
+
+    // Test 8: ResponseParseError.
     run_test("ResponseParseError", []()
     {
         ResponseParseError error("Invalid JSON");
@@ -180,7 +211,8 @@ int main()
         );
     }, passed, failed);
 
-    // Test 9: InvalidRequestError
+
+    // Test 9: InvalidRequestError.
     run_test("InvalidRequestError", []()
     {
         InvalidRequestError error("Empty request");
@@ -191,10 +223,97 @@ int main()
         );
     }, passed, failed);
 
+
+    // Test 10: OllamaClient valid configuration.
+    run_test("OllamaClient valid config", []()
+    {
+        OllamaClientConfig config;
+
+        config.base_url = "http://127.0.0.1:8000";
+        config.model = "mock-model";
+        config.connect_timeout_seconds = 10;
+        config.request_timeout_seconds = 30;
+
+        OllamaClient client(config);
+    }, passed, failed);
+
+
+    // Test 11: Empty model.
+    run_test("OllamaClient empty model", []()
+    {
+        OllamaClientConfig config;
+
+        config.model = "";
+
+        check_invalid_config(
+            [&]()
+            {
+                OllamaClient client(config);
+            },
+            "Empty model should throw InvalidRequestError"
+        );
+    }, passed, failed);
+
+
+    // Test 12: Invalid base URL.
+    run_test("OllamaClient invalid base URL", []()
+    {
+        OllamaClientConfig config;
+
+        config.model = "mock-model";
+        config.base_url = "ftp://127.0.0.1:8000";
+
+        check_invalid_config(
+            [&]()
+            {
+                OllamaClient client(config);
+            },
+            "Invalid base URL should throw InvalidRequestError"
+        );
+    }, passed, failed);
+
+
+    // Test 13: Invalid connect timeout.
+    run_test("OllamaClient invalid connect timeout", []()
+    {
+        OllamaClientConfig config;
+
+        config.model = "mock-model";
+        config.connect_timeout_seconds = 0;
+
+        check_invalid_config(
+            [&]()
+            {
+                OllamaClient client(config);
+            },
+            "Invalid connect timeout should throw InvalidRequestError"
+        );
+    }, passed, failed);
+
+
+    // Test 14: Invalid request timeout.
+    run_test("OllamaClient invalid request timeout", []()
+    {
+        OllamaClientConfig config;
+
+        config.model = "mock-model";
+        config.request_timeout_seconds = -1;
+
+        check_invalid_config(
+            [&]()
+            {
+                OllamaClient client(config);
+            },
+            "Invalid request timeout should throw InvalidRequestError"
+        );
+    }, passed, failed);
+
+
     cout << "\n========== TEST SUMMARY ==========\n";
     cout << "Passed: " << passed << '\n';
     cout << "Failed: " << failed << '\n';
     cout << "Total : " << passed + failed << '\n';
+    cout << "==================================\n";
 
     return failed == 0 ? 0 : 1;
 }
