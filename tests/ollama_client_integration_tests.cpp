@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <optional>
@@ -57,7 +58,11 @@ OllamaClientConfig create_config(const std::string& model)
 {
     OllamaClientConfig config;
 
-    config.base_url = "http://127.0.0.1:8000";
+   const char* base_url = std::getenv("OGK_TEST_BASE_URL");
+
+config.base_url = base_url
+    ? base_url
+    : "http://127.0.0.1:8000";
     config.model = model;
     config.connect_timeout_seconds = 2;
     config.request_timeout_seconds = 5;

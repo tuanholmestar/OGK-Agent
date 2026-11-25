@@ -107,15 +107,23 @@ class MockOllamaHandler(BaseHTTPRequestHandler):
                 "error": "Invalid JSON"
             })
 
-        except BrokenPipeError:
+        except (
+            BrokenPipeError,
+            ConnectionResetError,
+            ConnectionAbortedError
+        ):
             print("[Mock Server] Client disconnected.")
 
     def log_message(self, format, *args):
         print(f"[HTTP] {format % args}")
 
 
+def create_server(host=HOST, port=PORT):
+    return HTTPServer((host, port), MockOllamaHandler)
+
+
 def main():
-    server = HTTPServer((HOST, PORT), MockOllamaHandler)
+    server = create_server(HOST, PORT)
 
     print(f"[Mock Server] Running at http://{HOST}:{PORT}")
     print("[Mock Server] Waiting for requests...")

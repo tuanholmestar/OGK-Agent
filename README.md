@@ -59,13 +59,7 @@ cmake --build build --parallel
 
 ## Run tests
 
-Start the mock Ollama server in a separate terminal:
-
-```sh
-python3 tests/mock_server.py
-```
-
-Then run the tests:
+CTest starts and stops the local mock Ollama server automatically:
 
 ```sh
 ctest --test-dir build --output-on-failure
@@ -77,7 +71,7 @@ The test suite contains:
 - `ogk_integration_tests`
 
 The integration tests use a mock HTTP server. They do not require a running
-Ollama model.
+Ollama model. Python 3 is required to run the integration-test server.
 
 ## Documentation
 

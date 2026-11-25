@@ -59,19 +59,15 @@ Build:
 cmake --build build --parallel
 ```
 
-Start the mock server in a separate terminal:
-
-```sh
-python3 tests/mock_server.py
-```
-
-Run tests:
+Run tests; CTest starts and stops the local mock server automatically:
 
 ```sh
 ctest --test-dir build --output-on-failure
 ```
 
-The integration tests expect the mock server at `127.0.0.1:8000`.
+Python 3 is required for the integration-test runner and mock server. The
+runner binds the mock server to an automatically allocated loopback port and
+passes its URL to the integration-test executable.
 
 ## 4. Test coverage
 

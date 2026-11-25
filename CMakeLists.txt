@@ -54,6 +54,8 @@ include(CTest)
 
 if(BUILD_TESTING)
 
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
     # Unit Tests
     add_executable(ogk_unit_tests
         tests/unit_tests.cpp
@@ -82,7 +84,10 @@ if(BUILD_TESTING)
 
     add_test(
         NAME ogk_integration_tests
-        COMMAND ogk_integration_tests
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_integration_tests.py
+            $<TARGET_FILE:ogk_integration_tests>
     )
 
 endif()
