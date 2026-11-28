@@ -1,4 +1,6 @@
 
+#include "support/fake_environment.hpp"
+
 #include <ogk/llm/llm_errors.hpp>
 #include <ogk/llm/ollama_client.hpp>
 
@@ -8,6 +10,8 @@
 #include <string>
 
 using namespace ogk::llm;
+using namespace ogk::env;
+using namespace ogk::env::testing;
 using namespace std;
 
 
@@ -36,6 +40,27 @@ void check_invalid_config(
     catch (const InvalidRequestError&)
     {
         caught = true;
+    }
+
+    check(caught, message);
+}
+
+
+void check_environment_error(
+    const function<void()>& action,
+    EnvironmentErrorKind expected_kind,
+    const string& message
+)
+{
+    bool caught = false;
+
+    try
+    {
+        action();
+    }
+    catch (const EnvironmentError& error)
+    {
+        caught = error.kind() == expected_kind;
     }
 
     check(caught, message);
@@ -305,6 +330,281 @@ int main()
                 OllamaClient client(config);
             },
             "Invalid request timeout should throw InvalidRequestError"
+        );
+    }, passed, failed);
+
+
+    // Test 15: FakeEnvironment reads an existing text file.
+    run_test("FakeEnvironment reads text file", []()
+    {
+        FakeEnvironment environment;
+        environment.add_text_file("notes.txt", "hello");
+
+        check(
+            environment.read_text("notes.txt") == "hello",
+            "Text file content should match"
+        );
+    }, passed, failed);
+
+
+    // Test 16: FakeEnvironment reports a missing text file.
+    run_test("FakeEnvironment missing text file", []()
+    {
+        FakeEnvironment environment;
+
+        check_environment_error(
+            [&]()
+            {
+                (void)environment.read_text("missing.txt");
+            },
+            EnvironmentErrorKind::NotFound,
+            "Missing text file should report NotFound"
+        );
+    }, passed, failed);
+
+
+    // Test 17: FakeEnvironment writes a new text file.
+    run_test("FakeEnvironment writes new text file", []()
+    {
+        FakeEnvironment environment;
+        environment.write_text("new.txt", "new content", false);
+
+        check(
+            environment.get_written_file("new.txt") == "new content",
+            "Written text should be stored"
+        );
+    }, passed, failed);
+
+
+    // Test 18: FakeEnvironment rejects a disallowed overwrite.
+    run_test("FakeEnvironment rejects overwrite", []()
+    {
+        FakeEnvironment environment;
+        environment.add_text_file("existing.txt", "original");
+
+        check_environment_error(
+            [&]()
+            {
+                environment.write_text("existing.txt", "changed", false);
+            },
+            EnvironmentErrorKind::ExecutionFailed,
+            "overwrite=false should report ExecutionFailed"
+        );
+
+        check(
+            environment.get_written_file("existing.txt") == "original",
+            "Rejected overwrite should preserve the original content"
+        );
+    }, passed, failed);
+
+
+    // Test 19: FakeEnvironment overwrites an existing text file.
+    run_test("FakeEnvironment overwrites text file", []()
+    {
+        FakeEnvironment environment;
+        environment.add_text_file("existing.txt", "original");
+        environment.write_text("existing.txt", "replacement", true);
+
+        check(
+            environment.get_written_file("existing.txt") == "replacement",
+            "overwrite=true should replace existing content"
+        );
+    }, passed, failed);
+
+
+    // Test 20: FakeEnvironment reads an existing binary file.
+    run_test("FakeEnvironment reads binary file", []()
+    {
+        FakeEnvironment environment;
+        const vector<byte> expected{byte{0x00}, byte{0x41}, byte{0xFF}};
+        environment.add_binary_file("image.bin", expected);
+
+        check(
+            environment.read_binary("image.bin") == expected,
+            "Binary file bytes should match"
+        );
+    }, passed, failed);
+
+
+    // Test 21: FakeEnvironment rejects a text write over binary data.
+    run_test("FakeEnvironment rejects text write over binary file", []()
+    {
+        FakeEnvironment environment;
+        const vector<byte> original{byte{0x41}};
+        environment.add_binary_file("shared.dat", original);
+
+        check_environment_error(
+            [&]()
+            {
+                environment.write_text("shared.dat", "text", false);
+            },
+            EnvironmentErrorKind::ExecutionFailed,
+            "overwrite=false should reject an existing binary path"
+        );
+
+        check(
+            environment.read_binary("shared.dat") == original,
+            "Rejected write should preserve the binary file"
+        );
+    }, passed, failed);
+
+
+    // Test 22: FakeEnvironment replaces binary data with a text write.
+    run_test("FakeEnvironment overwrites binary file with text", []()
+    {
+        FakeEnvironment environment;
+        environment.add_binary_file("shared.dat", {byte{0x41}});
+        environment.write_text("shared.dat", "text", true);
+
+        check(
+            environment.get_written_file("shared.dat") == "text",
+            "Text content should replace binary data"
+        );
+
+        check_environment_error(
+            [&]()
+            {
+                (void)environment.read_binary("shared.dat");
+            },
+            EnvironmentErrorKind::NotFound,
+            "Overwritten binary entry should be removed"
+        );
+    }, passed, failed);
+
+
+    // Test 23: FakeEnvironment keeps text and binary paths mutually exclusive.
+    run_test("FakeEnvironment shares text and binary path namespace", []()
+    {
+        FakeEnvironment environment;
+        const vector<byte> binary_content{byte{0x42}};
+        environment.add_text_file("shared.dat", "text");
+        environment.add_binary_file("shared.dat", binary_content);
+
+        check(
+            environment.read_binary("shared.dat") == binary_content,
+            "Adding binary data should replace text at the same path"
+        );
+
+        check_environment_error(
+            [&]()
+            {
+                (void)environment.read_text("shared.dat");
+            },
+            EnvironmentErrorKind::NotFound,
+            "Adding binary data should remove the text entry"
+        );
+
+        environment.add_text_file("shared.dat", "replacement");
+
+        check(
+            environment.read_text("shared.dat") == "replacement",
+            "Adding text should replace binary data at the same path"
+        );
+
+        check_environment_error(
+            [&]()
+            {
+                (void)environment.read_binary("shared.dat");
+            },
+            EnvironmentErrorKind::NotFound,
+            "Adding text should remove the binary entry"
+        );
+    }, passed, failed);
+
+
+    // Test 24: FakeEnvironment reports a missing binary file.
+    run_test("FakeEnvironment missing binary file", []()
+    {
+        FakeEnvironment environment;
+
+        check_environment_error(
+            [&]()
+            {
+                (void)environment.read_binary("missing.bin");
+            },
+            EnvironmentErrorKind::NotFound,
+            "Missing binary file should report NotFound"
+        );
+    }, passed, failed);
+
+
+    // Test 25: FakeEnvironment returns a configured process result.
+    run_test("FakeEnvironment configured process result", []()
+    {
+        FakeEnvironment environment;
+        const ProcessResult expected{
+            ProcessStopReason::Signaled,
+            nullopt,
+            9,
+            {byte{0x41}},
+            {byte{0x42}},
+            true
+        };
+        environment.set_process_result(expected);
+
+        const ProcessResult actual = environment.run_process({
+            "ignored-executable",
+            {},
+            chrono::milliseconds(100),
+            128,
+            128
+        });
+
+        check(
+            actual.stop_reason == expected.stop_reason &&
+                actual.exit_code == expected.exit_code &&
+                actual.signal_number == expected.signal_number &&
+                actual.stdout_bytes == expected.stdout_bytes &&
+                actual.stderr_bytes == expected.stderr_bytes &&
+                actual.truncated == expected.truncated,
+            "Configured process result should be returned unchanged"
+        );
+    }, passed, failed);
+
+
+    // Test 26: FakeEnvironment throws a configured process error.
+    run_test("FakeEnvironment configured process error", []()
+    {
+        FakeEnvironment environment;
+        environment.set_process_error(
+            EnvironmentErrorKind::ResourceUnavailable,
+            "Configured fake process error"
+        );
+
+        check_environment_error(
+            [&]()
+            {
+                (void)environment.run_process({
+                    "ignored-executable",
+                    {},
+                    chrono::milliseconds(100),
+                    128,
+                    128
+                });
+            },
+            EnvironmentErrorKind::ResourceUnavailable,
+            "Configured process error kind should be preserved"
+        );
+    }, passed, failed);
+
+
+    // Test 27: FakeEnvironment requires a configured process outcome.
+    run_test("FakeEnvironment requires process configuration", []()
+    {
+        FakeEnvironment environment;
+        check_environment_error(
+            [&]()
+            {
+                (void)environment.run_process({
+                    "not-a-real-executable",
+                    {},
+                    chrono::milliseconds(100),
+                    128,
+                    128
+                });
+            },
+            EnvironmentErrorKind::ExecutionFailed,
+            "Unconfigured process should report ExecutionFailed"
         );
     }, passed, failed);
 
